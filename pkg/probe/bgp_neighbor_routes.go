@@ -1,0 +1,176 @@
+// Copyright The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package probe
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/prometheus-community/fortigate_exporter/internal/config"
+	"github.com/prometheus-community/fortigate_exporter/pkg/fortigatehttpclient"
+)
+
+type BGPPath struct {
+	LearnedFrom string `json:"learned_from"`
+	IsBest      bool   `json:"is_best"`
+}
+
+type BGPPaths struct {
+	Results []BGPPath `json:"results"`
+	VDOM    string    `json:"vdom"`
+	Version string    `json:"version"`
+}
+
+type PathCount struct {
+	Source string
+	VDOM   string
+}
+
+func probeBGPNeighborPathsIPv4(c fortigatehttpclient.FortiHTTP, meta *TargetMetadata) ([]prometheus.Metric, bool) {
+	savedConfig := config.GetConfig()
+	MaxBGPPaths := savedConfig.MaxBGPPaths
+
+	if MaxBGPPaths == 0 {
+		return nil, true
+	}
+
+	if meta.VersionMajor < 7 {
+		// not supported version. Before 7.0.0 the requested endpoint doesn't exist
+		return nil, true
+	}
+	var (
+		BGPNeighborPaths = prometheus.NewDesc(
+			"fortigate_bgp_neighbor_ipv4_paths",
+			"Count of paths received from an BGP neighbor",
+			[]string{"vdom", "neighbor_ip"}, nil,
+		)
+		BGPNeighborBestPaths = prometheus.NewDesc(
+			"fortigate_bgp_neighbor_ipv4_best_paths",
+			"Count of best paths for an BGP neighbor",
+			[]string{"vdom", "neighbor_ip"}, nil,
+		)
+	)
+
+	var rs []BGPPaths
+
+	if err := c.Get("api/v2/monitor/router/bgp/paths", fmt.Sprintf("vdom=*&count=%d", MaxBGPPaths), &rs); err != nil {
+		log.Printf("Error: %v", err)
+		return nil, false
+	}
+
+	m := []prometheus.Metric{}
+
+	srMap := make(map[PathCount]int)
+	sr2Map := make(map[PathCount]int)
+	for _, r := range rs {
+
+		if len(r.Results) > MaxBGPPaths {
+			log.Printf("Error: Received more BGP Paths than maximum (%d > %d) allowed, ignoring metric ...", len(r.Results), MaxBGPPaths)
+			return nil, false
+		}
+		for _, route := range r.Results {
+			sr := PathCount{
+				Source: route.LearnedFrom,
+				VDOM:   r.VDOM,
+			}
+			srMap[sr]++
+			if route.IsBest {
+				sr2 := PathCount{
+					Source: route.LearnedFrom,
+					VDOM:   r.VDOM,
+				}
+				sr2Map[sr2]++
+			}
+		}
+	}
+
+	for neighbor, count := range srMap {
+		m = append(m, prometheus.MustNewConstMetric(BGPNeighborPaths, prometheus.GaugeValue, float64(count), neighbor.VDOM, neighbor.Source))
+	}
+	for neighbor, count := range sr2Map {
+		m = append(m, prometheus.MustNewConstMetric(BGPNeighborBestPaths, prometheus.GaugeValue, float64(count), neighbor.VDOM, neighbor.Source))
+	}
+
+	return m, true
+}
+
+func probeBGPNeighborPathsIPv6(c fortigatehttpclient.FortiHTTP, meta *TargetMetadata) ([]prometheus.Metric, bool) {
+	savedConfig := config.GetConfig()
+	MaxBGPPaths := savedConfig.MaxBGPPaths
+
+	if MaxBGPPaths == 0 {
+		return nil, true
+	}
+
+	if meta.VersionMajor < 7 {
+		// not supported version. Before 7.0.0 the requested endpoint doesn't exist
+		return nil, true
+	}
+	var (
+		BGPNeighborPaths = prometheus.NewDesc(
+			"fortigate_bgp_neighbor_ipv6_paths",
+			"Count of paths received from an BGP neighbor",
+			[]string{"vdom", "neighbor_ip"}, nil,
+		)
+		BGPNeighborBestPaths = prometheus.NewDesc(
+			"fortigate_bgp_neighbor_ipv6_best_paths",
+			"Count of best paths for an BGP neighbor",
+			[]string{"vdom", "neighbor_ip"}, nil,
+		)
+	)
+
+	var rs []BGPPaths
+
+	if err := c.Get("api/v2/monitor/router/bgp/paths6", fmt.Sprintf("vdom=*&count=%d", MaxBGPPaths), &rs); err != nil {
+		log.Printf("Error: %v", err)
+		return nil, false
+	}
+
+	m := []prometheus.Metric{}
+
+	srMap := make(map[PathCount]int)
+	sr2Map := make(map[PathCount]int)
+	for _, r := range rs {
+
+		if len(r.Results) > MaxBGPPaths {
+			log.Printf("Error: Received more BGP Paths than maximum (%d > %d) allowed, ignoring metric ...", len(r.Results), MaxBGPPaths)
+			return nil, false
+		}
+		for _, route := range r.Results {
+			sr := PathCount{
+				Source: route.LearnedFrom,
+				VDOM:   r.VDOM,
+			}
+			srMap[sr]++
+			if route.IsBest {
+				sr2 := PathCount{
+					Source: route.LearnedFrom,
+					VDOM:   r.VDOM,
+				}
+				sr2Map[sr2]++
+			}
+		}
+	}
+
+	for neighbor, count := range srMap {
+		m = append(m, prometheus.MustNewConstMetric(BGPNeighborPaths, prometheus.GaugeValue, float64(count), neighbor.VDOM, neighbor.Source))
+	}
+	for neighbor, count := range sr2Map {
+		m = append(m, prometheus.MustNewConstMetric(BGPNeighborBestPaths, prometheus.GaugeValue, float64(count), neighbor.VDOM, neighbor.Source))
+	}
+
+	return m, true
+}

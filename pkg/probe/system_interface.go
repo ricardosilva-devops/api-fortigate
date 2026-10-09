@@ -1,0 +1,155 @@
+// Copyright The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package probe
+
+import (
+	"log"
+	"strconv"
+
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/prometheus-community/fortigate_exporter/pkg/fortigatehttpclient"
+)
+
+func probeSystemInterface(c fortigatehttpclient.FortiHTTP, _ *TargetMetadata) ([]prometheus.Metric, bool) {
+	var (
+		mLink = prometheus.NewDesc(
+			"fortigate_interface_link_up",
+			"Whether the link is up or not (not taking into account admin status)",
+			[]string{"vdom", "name", "vlanid", "alias", "parent"}, nil,
+		)
+		mSpeed = prometheus.NewDesc(
+			"fortigate_interface_speed_bps",
+			"Speed negotiated on the port in bits/s",
+			[]string{"vdom", "name", "vlanid", "alias", "parent"}, nil,
+		)
+		mTxPkts = prometheus.NewDesc(
+			"fortigate_interface_transmit_packets_total",
+			"Number of packets transmitted on the interface",
+			[]string{"vdom", "name", "vlanid", "alias", "parent"}, nil,
+		)
+		mRxPkts = prometheus.NewDesc(
+			"fortigate_interface_receive_packets_total",
+			"Number of packets received on the interface",
+			[]string{"vdom", "name", "vlanid", "alias", "parent"}, nil,
+		)
+		mTxB = prometheus.NewDesc(
+			"fortigate_interface_transmit_bytes_total",
+			"Number of bytes transmitted on the interface",
+			[]string{"vdom", "name", "vlanid", "alias", "parent"}, nil,
+		)
+		mRxB = prometheus.NewDesc(
+			"fortigate_interface_receive_bytes_total",
+			"Number of bytes received on the interface",
+			[]string{"vdom", "name", "vlanid", "alias", "parent"}, nil,
+		)
+		mTxErr = prometheus.NewDesc(
+			"fortigate_interface_transmit_errors_total",
+			"Number of transmission errors detected on the interface",
+			[]string{"vdom", "name", "vlanid", "alias", "parent"}, nil,
+		)
+		mRxErr = prometheus.NewDesc(
+			"fortigate_interface_receive_errors_total",
+			"Number of reception errors detected on the interface",
+			[]string{"vdom", "name", "vlanid", "alias", "parent"}, nil,
+		)
+		// Metadados da interface como info metric, e nao como labels das
+		// metricas de trafego: o IP de uma WAN muda quando o link e
+		// renegociado, e isso criaria uma serie nova a cada troca, partindo o
+		// historico dos contadores. Como info metric, o valor e sempre 1 e a
+		// mudanca de IP so troca esta serie - os contadores seguem intactos.
+		// Junta-se com:
+		//   metrica * on(vdom, name) group_left(ip, mac, duplex) fortigate_interface_info
+		mInfo = prometheus.NewDesc(
+			"fortigate_interface_info",
+			"Interface metadata reported by the monitor API (always 1)",
+			[]string{"vdom", "name", "vlanid", "alias", "parent", "ip", "mask", "mac", "duplex"}, nil,
+		)
+	)
+
+	type ifResult struct {
+		ID        string
+		Name      string
+		Alias     string
+		Link      bool
+		Speed     float64
+		Duplex    float64
+		TxPackets float64 `json:"tx_packets"`
+		RxPackets float64 `json:"rx_packets"`
+		TxBytes   float64 `json:"tx_bytes"`
+		RxBytes   float64 `json:"rx_bytes"`
+		TxErrors  float64 `json:"tx_errors"`
+		RxErrors  float64 `json:"rx_errors"`
+		VlanID    int     `json:"vlanid"`
+		// Duplex ja existia na struct do upstream e nunca era exposto. IP,
+		// Mask e Mac chegam no mesmo payload e nao estavam declarados - o dado
+		// vinha da API a cada scrape e era descartado.
+		IP        string  `json:"ip"`
+		Mask      float64 `json:"mask"`
+		Mac       string  `json:"mac"`
+		Interface string
+	}
+	type ifResponse struct {
+		Results map[string]ifResult
+		VDOM    string
+	}
+	var r []ifResponse
+
+	if err := c.Get("api/v2/monitor/system/interface/select", "vdom=*&include_vlan=true&include_aggregate=true", &r); err != nil {
+		log.Printf("Error: %v", err)
+		return nil, false
+	}
+	m := []prometheus.Metric{}
+	for _, v := range r {
+		for _, ir := range v.Results {
+			linkf := 0.0
+			if ir.Link {
+				linkf = 1.0
+			}
+			vlanString := strconv.Itoa(ir.VlanID)
+			m = append(m, prometheus.MustNewConstMetric(mLink, prometheus.GaugeValue, linkf, v.VDOM, ir.Name, vlanString, ir.Alias, ir.Interface))
+			m = append(m, prometheus.MustNewConstMetric(mSpeed, prometheus.GaugeValue, ir.Speed*1000*1000, v.VDOM, ir.Name, vlanString, ir.Alias, ir.Interface))
+			m = append(m, prometheus.MustNewConstMetric(mTxPkts, prometheus.CounterValue, ir.TxPackets, v.VDOM, ir.Name, vlanString, ir.Alias, ir.Interface))
+			m = append(m, prometheus.MustNewConstMetric(mRxPkts, prometheus.CounterValue, ir.RxPackets, v.VDOM, ir.Name, vlanString, ir.Alias, ir.Interface))
+			m = append(m, prometheus.MustNewConstMetric(mTxB, prometheus.CounterValue, ir.TxBytes, v.VDOM, ir.Name, vlanString, ir.Alias, ir.Interface))
+			m = append(m, prometheus.MustNewConstMetric(mRxB, prometheus.CounterValue, ir.RxBytes, v.VDOM, ir.Name, vlanString, ir.Alias, ir.Interface))
+			m = append(m, prometheus.MustNewConstMetric(mTxErr, prometheus.CounterValue, ir.TxErrors, v.VDOM, ir.Name, vlanString, ir.Alias, ir.Interface))
+			m = append(m, prometheus.MustNewConstMetric(mRxErr, prometheus.CounterValue, ir.RxErrors, v.VDOM, ir.Name, vlanString, ir.Alias, ir.Interface))
+
+			// duplex: 1 = full, 0 = half. A API devolve numero; exportamos
+			// texto para o label ficar legivel no painel.
+			duplex := "half"
+			if ir.Duplex == 1 {
+				duplex = "full"
+			}
+			// 0.0.0.0 significa "sem endereco" (tunel, ou dhcp sem lease) e o
+			// MAC zerado aparece em VLAN, que herda o da interface-pai.
+			// Exportar vazio evita o painel exibir dado falso.
+			ip := ir.IP
+			mask := ""
+			if ip == "0.0.0.0" {
+				ip = ""
+			} else if ir.Mask > 0 {
+				mask = strconv.FormatFloat(ir.Mask, 'f', -1, 64)
+			}
+			mac := ir.Mac
+			if mac == "00:00:00:00:00:00" {
+				mac = ""
+			}
+			m = append(m, prometheus.MustNewConstMetric(mInfo, prometheus.GaugeValue, 1,
+				v.VDOM, ir.Name, vlanString, ir.Alias, ir.Interface, ip, mask, mac, duplex))
+		}
+	}
+	return m, true
+}

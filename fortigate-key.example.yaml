@@ -1,0 +1,3 @@
+# EXAMPLE ONLY - never commit operational credentials
+"https://fortigate.example.invalid":
+  token: "EXAMPLE_API_TOKEN_NOT_VALID"

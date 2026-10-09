@@ -1,0 +1,128 @@
+// Copyright The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Tests of fortigate_exporter
+//
+// Copyright (C) 2020  Christian Svensson
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+package probe
+
+import (
+	"encoding/json"
+	"log"
+	"net/url"
+
+	"github.com/google/go-jsonnet"
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/prometheus-community/fortigate_exporter/pkg/fortigatehttpclient"
+)
+
+type preparedResp struct {
+	d []byte
+	q url.Values
+}
+
+type fakeClient struct {
+	data map[string][]preparedResp
+}
+
+func (c *fakeClient) prepare(path, jfile string) {
+	u, err := url.Parse(path)
+	if err != nil {
+		panic(err)
+	}
+	vm := jsonnet.MakeVM()
+	output, err := vm.EvaluateFile(jfile)
+	if err != nil {
+		log.Fatalf("Failed to evaluate jsonnet %q: %v", jfile, err)
+	}
+	c.data[u.Path] = append(c.data[u.Path], preparedResp{
+		d: []byte(output),
+		q: u.Query(),
+	})
+}
+
+func (c *fakeClient) Get(path, query string, obj any) error {
+	rs, ok := c.data[path]
+	if !ok {
+		log.Fatalf("Tried to get unprepared URL %q", path)
+	}
+	q, err := url.ParseQuery(query)
+	if err != nil {
+		log.Fatalf("Unable to parse DUT query: %v", err)
+	}
+alt:
+	for _, r := range rs {
+		for k, v := range r.q {
+			if len(q[k]) == 0 || q[k][0] != v[0] {
+				continue alt
+			}
+		}
+		return json.Unmarshal(r.d, obj)
+	}
+	log.Fatalf("No prepared response matched URL %q, query %q", path, query)
+	return nil
+}
+
+type Registry interface {
+	MustRegister(...prometheus.Collector)
+}
+
+type testCollector struct {
+	metrics []prometheus.Metric
+}
+
+func (p *testCollector) Collect(c chan<- prometheus.Metric) {
+	for _, m := range p.metrics {
+		c <- m
+	}
+}
+
+func (p *testCollector) Describe(_ chan<- *prometheus.Desc) {
+}
+
+func testProbe(pf probeFunc, c fortigatehttpclient.FortiHTTP, r Registry) bool {
+	meta := &TargetMetadata{
+		VersionMajor: 7,
+		VersionMinor: 4,
+	}
+	return testProbeWithMetadata(pf, c, meta, r)
+}
+
+func testProbeWithMetadata(pf probeFunc, c fortigatehttpclient.FortiHTTP, meta *TargetMetadata, r Registry) bool {
+	m, ok := pf(c, meta)
+	if !ok {
+		return false
+	}
+	p := &testCollector{metrics: m}
+	r.MustRegister(p)
+	return true
+}
+
+func newFakeClient() *fakeClient {
+	return &fakeClient{data: map[string][]preparedResp{}}
+}

@@ -1,0 +1,199 @@
+// Copyright The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package probe
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+)
+
+func TestSystemInterfaces(t *testing.T) {
+	c := newFakeClient()
+	c.prepare("api/v2/monitor/system/interface/select", "testdata/interface.jsonnet")
+	r := prometheus.NewPedanticRegistry()
+	if !testProbe(probeSystemInterface, c, r) {
+		t.Errorf("probeSystemInterface() returned non-success")
+	}
+
+	em := `
+	# HELP fortigate_interface_info Interface metadata reported by the monitor API (always 1)
+	# TYPE fortigate_interface_info gauge
+	fortigate_interface_info{alias="",duplex="full",ip="",mac="",mask="",name="internal1",parent="",vdom="infra",vlanid="0"} 1
+	fortigate_interface_info{alias="",duplex="full",ip="",mac="",mask="",name="internal2",parent="",vdom="infra",vlanid="0"} 1
+	fortigate_interface_info{alias="",duplex="full",ip="",mac="",mask="",name="npu0_vlink0",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_info{alias="",duplex="full",ip="",mac="",mask="",name="npu0_vlink1",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_info{alias="",duplex="full",ip="",mac="",mask="",name="vlan-knx",parent="downlink",vdom="knx",vlanid="2030"} 1
+	fortigate_interface_info{alias="",duplex="full",ip="",mac="",mask="",name="vlan-ocp-knx",parent="a",vdom="knx",vlanid="2030"} 1
+	fortigate_interface_info{alias="",duplex="full",ip="178.132.72.38",mac="",mask="24",name="wan1",parent="",vdom="main",vlanid="0"} 1
+	fortigate_interface_info{alias="",duplex="half",ip="",mac="",mask="",name="b",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_info{alias="",duplex="half",ip="",mac="",mask="",name="internal3",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_info{alias="",duplex="half",ip="",mac="",mask="",name="internal4",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_info{alias="",duplex="half",ip="",mac="",mask="",name="internal5",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_info{alias="",duplex="half",ip="",mac="",mask="",name="modem",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_info{alias="",duplex="half",ip="",mac="",mask="",name="wan2",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_info{alias="(mgmt)",duplex="full",ip="10.0.6.254",mac="",mask="24",name="dmz",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_info{alias="(ocp-mgmt)",duplex="full",ip="10.0.255.1",mac="",mask="29",name="a",parent="",vdom="main",vlanid="0"} 1
+	fortigate_interface_info{alias="(vlan-infra-mgmt)",duplex="full",ip="192.168.1.1",mac="",mask="24",name="downlink",parent="",vdom="infra",vlanid="0"} 1
+	# HELP fortigate_interface_link_up Whether the link is up or not (not taking into account admin status)
+	# TYPE fortigate_interface_link_up gauge
+	fortigate_interface_link_up{alias="",name="b",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_link_up{alias="",name="internal1",parent="",vdom="infra",vlanid="0"} 1
+	fortigate_interface_link_up{alias="",name="internal2",parent="",vdom="infra",vlanid="0"} 1
+	fortigate_interface_link_up{alias="",name="internal3",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_link_up{alias="",name="internal4",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_link_up{alias="",name="internal5",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_link_up{alias="",name="modem",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_link_up{alias="",name="npu0_vlink0",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_link_up{alias="",name="npu0_vlink1",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_link_up{alias="",name="vlan-knx",parent="downlink",vdom="knx",vlanid="2030"} 1
+	fortigate_interface_link_up{alias="",name="vlan-ocp-knx",parent="a",vdom="knx",vlanid="2030"} 1
+	fortigate_interface_link_up{alias="",name="wan1",parent="",vdom="main",vlanid="0"} 1
+	fortigate_interface_link_up{alias="",name="wan2",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_link_up{alias="(mgmt)",name="dmz",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_link_up{alias="(ocp-mgmt)",name="a",parent="",vdom="main",vlanid="0"} 1
+	fortigate_interface_link_up{alias="(vlan-infra-mgmt)",name="downlink",parent="",vdom="infra",vlanid="0"} 1
+	# HELP fortigate_interface_receive_bytes_total Number of bytes received on the interface
+	# TYPE fortigate_interface_receive_bytes_total counter
+	fortigate_interface_receive_bytes_total{alias="",name="b",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_bytes_total{alias="",name="internal1",parent="",vdom="infra",vlanid="0"} 1.7367580312e+10
+	fortigate_interface_receive_bytes_total{alias="",name="internal2",parent="",vdom="infra",vlanid="0"} 7.929384567e+09
+	fortigate_interface_receive_bytes_total{alias="",name="internal3",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_bytes_total{alias="",name="internal4",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_bytes_total{alias="",name="internal5",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_bytes_total{alias="",name="modem",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_bytes_total{alias="",name="npu0_vlink0",parent="",vdom="root",vlanid="0"} 90
+	fortigate_interface_receive_bytes_total{alias="",name="npu0_vlink1",parent="",vdom="root",vlanid="0"} 90
+	fortigate_interface_receive_bytes_total{alias="",name="vlan-knx",parent="downlink",vdom="knx",vlanid="2030"} 964072
+	fortigate_interface_receive_bytes_total{alias="",name="vlan-ocp-knx",parent="a",vdom="knx",vlanid="2030"} 2.3445384e+07
+	fortigate_interface_receive_bytes_total{alias="",name="wan1",parent="",vdom="main",vlanid="0"} 4.8782482049e+10
+	fortigate_interface_receive_bytes_total{alias="",name="wan2",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_bytes_total{alias="(mgmt)",name="dmz",parent="",vdom="root",vlanid="0"} 1.310564319e+09
+	fortigate_interface_receive_bytes_total{alias="(ocp-mgmt)",name="a",parent="",vdom="main",vlanid="0"} 1.4568944108e+10
+	fortigate_interface_receive_bytes_total{alias="(vlan-infra-mgmt)",name="downlink",parent="",vdom="infra",vlanid="0"} 2.5353784011e+10
+	# HELP fortigate_interface_receive_errors_total Number of reception errors detected on the interface
+	# TYPE fortigate_interface_receive_errors_total counter
+	fortigate_interface_receive_errors_total{alias="",name="b",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="",name="internal1",parent="",vdom="infra",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="",name="internal2",parent="",vdom="infra",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="",name="internal3",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="",name="internal4",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="",name="internal5",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="",name="modem",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="",name="npu0_vlink0",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="",name="npu0_vlink1",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="",name="vlan-knx",parent="downlink",vdom="knx",vlanid="2030"} 0
+	fortigate_interface_receive_errors_total{alias="",name="vlan-ocp-knx",parent="a",vdom="knx",vlanid="2030"} 0
+	fortigate_interface_receive_errors_total{alias="",name="wan1",parent="",vdom="main",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="",name="wan2",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="(mgmt)",name="dmz",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="(ocp-mgmt)",name="a",parent="",vdom="main",vlanid="0"} 0
+	fortigate_interface_receive_errors_total{alias="(vlan-infra-mgmt)",name="downlink",parent="",vdom="infra",vlanid="0"} 0
+	# HELP fortigate_interface_receive_packets_total Number of packets received on the interface
+	# TYPE fortigate_interface_receive_packets_total counter
+	fortigate_interface_receive_packets_total{alias="",name="b",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_packets_total{alias="",name="internal1",parent="",vdom="infra",vlanid="0"} 5.278112e+07
+	fortigate_interface_receive_packets_total{alias="",name="internal2",parent="",vdom="infra",vlanid="0"} 5.495165e+07
+	fortigate_interface_receive_packets_total{alias="",name="internal3",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_packets_total{alias="",name="internal4",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_packets_total{alias="",name="internal5",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_packets_total{alias="",name="modem",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_packets_total{alias="",name="npu0_vlink0",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_receive_packets_total{alias="",name="npu0_vlink1",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_receive_packets_total{alias="",name="vlan-knx",parent="downlink",vdom="knx",vlanid="2030"} 5325
+	fortigate_interface_receive_packets_total{alias="",name="vlan-ocp-knx",parent="a",vdom="knx",vlanid="2030"} 134805
+	fortigate_interface_receive_packets_total{alias="",name="wan1",parent="",vdom="main",vlanid="0"} 4.0481777e+07
+	fortigate_interface_receive_packets_total{alias="",name="wan2",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_receive_packets_total{alias="(mgmt)",name="dmz",parent="",vdom="root",vlanid="0"} 6.376122e+06
+	fortigate_interface_receive_packets_total{alias="(ocp-mgmt)",name="a",parent="",vdom="main",vlanid="0"} 1.43943096e+08
+	fortigate_interface_receive_packets_total{alias="(vlan-infra-mgmt)",name="downlink",parent="",vdom="infra",vlanid="0"} 1.0787347e+08
+	# HELP fortigate_interface_speed_bps Speed negotiated on the port in bits/s
+	# TYPE fortigate_interface_speed_bps gauge
+	fortigate_interface_speed_bps{alias="",name="b",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_speed_bps{alias="",name="internal1",parent="",vdom="infra",vlanid="0"} 1e+09
+	fortigate_interface_speed_bps{alias="",name="internal2",parent="",vdom="infra",vlanid="0"} 1e+09
+	fortigate_interface_speed_bps{alias="",name="internal3",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_speed_bps{alias="",name="internal4",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_speed_bps{alias="",name="internal5",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_speed_bps{alias="",name="modem",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_speed_bps{alias="",name="npu0_vlink0",parent="",vdom="root",vlanid="0"} 1e+09
+	fortigate_interface_speed_bps{alias="",name="npu0_vlink1",parent="",vdom="root",vlanid="0"} 1e+09
+	fortigate_interface_speed_bps{alias="",name="vlan-knx",parent="downlink",vdom="knx",vlanid="2030"} 2e+09
+	fortigate_interface_speed_bps{alias="",name="vlan-ocp-knx",parent="a",vdom="knx",vlanid="2030"} 1e+09
+	fortigate_interface_speed_bps{alias="",name="wan1",parent="",vdom="main",vlanid="0"} 1e+09
+	fortigate_interface_speed_bps{alias="",name="wan2",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_speed_bps{alias="(mgmt)",name="dmz",parent="",vdom="root",vlanid="0"} 1e+09
+	fortigate_interface_speed_bps{alias="(ocp-mgmt)",name="a",parent="",vdom="main",vlanid="0"} 1e+09
+	fortigate_interface_speed_bps{alias="(vlan-infra-mgmt)",name="downlink",parent="",vdom="infra",vlanid="0"} 2e+09
+	# HELP fortigate_interface_transmit_bytes_total Number of bytes transmitted on the interface
+	# TYPE fortigate_interface_transmit_bytes_total counter
+	fortigate_interface_transmit_bytes_total{alias="",name="b",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_bytes_total{alias="",name="internal1",parent="",vdom="infra",vlanid="0"} 1.3038411253e+10
+	fortigate_interface_transmit_bytes_total{alias="",name="internal2",parent="",vdom="infra",vlanid="0"} 1.0426856559e+10
+	fortigate_interface_transmit_bytes_total{alias="",name="internal3",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_bytes_total{alias="",name="internal4",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_bytes_total{alias="",name="internal5",parent="",vdom="root",vlanid="0"} 6.4687125982e+17
+	fortigate_interface_transmit_bytes_total{alias="",name="modem",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_bytes_total{alias="",name="npu0_vlink0",parent="",vdom="root",vlanid="0"} 90
+	fortigate_interface_transmit_bytes_total{alias="",name="npu0_vlink1",parent="",vdom="root",vlanid="0"} 90
+	fortigate_interface_transmit_bytes_total{alias="",name="vlan-knx",parent="downlink",vdom="knx",vlanid="2030"} 2.1098754e+07
+	fortigate_interface_transmit_bytes_total{alias="",name="vlan-ocp-knx",parent="a",vdom="knx",vlanid="2030"} 742101
+	fortigate_interface_transmit_bytes_total{alias="",name="wan1",parent="",vdom="main",vlanid="0"} 8.056925505e+09
+	fortigate_interface_transmit_bytes_total{alias="",name="wan2",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_bytes_total{alias="(mgmt)",name="dmz",parent="",vdom="root",vlanid="0"} 2.489018103e+09
+	fortigate_interface_transmit_bytes_total{alias="(ocp-mgmt)",name="a",parent="",vdom="main",vlanid="0"} 5.5827906482e+10
+	fortigate_interface_transmit_bytes_total{alias="(vlan-infra-mgmt)",name="downlink",parent="",vdom="infra",vlanid="0"} 2.3561313347e+10
+	# HELP fortigate_interface_transmit_errors_total Number of transmission errors detected on the interface
+	# TYPE fortigate_interface_transmit_errors_total counter
+	fortigate_interface_transmit_errors_total{alias="",name="b",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="",name="internal1",parent="",vdom="infra",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="",name="internal2",parent="",vdom="infra",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="",name="internal3",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="",name="internal4",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="",name="internal5",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="",name="modem",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="",name="npu0_vlink0",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="",name="npu0_vlink1",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="",name="vlan-knx",parent="downlink",vdom="knx",vlanid="2030"} 0
+	fortigate_interface_transmit_errors_total{alias="",name="vlan-ocp-knx",parent="a",vdom="knx",vlanid="2030"} 0
+	fortigate_interface_transmit_errors_total{alias="",name="wan1",parent="",vdom="main",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="",name="wan2",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="(mgmt)",name="dmz",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="(ocp-mgmt)",name="a",parent="",vdom="main",vlanid="0"} 0
+	fortigate_interface_transmit_errors_total{alias="(vlan-infra-mgmt)",name="downlink",parent="",vdom="infra",vlanid="0"} 0
+	# HELP fortigate_interface_transmit_packets_total Number of packets transmitted on the interface
+	# TYPE fortigate_interface_transmit_packets_total counter
+	fortigate_interface_transmit_packets_total{alias="",name="b",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_packets_total{alias="",name="internal1",parent="",vdom="infra",vlanid="0"} 6.3722042e+07
+	fortigate_interface_transmit_packets_total{alias="",name="internal2",parent="",vdom="infra",vlanid="0"} 6.0035128e+07
+	fortigate_interface_transmit_packets_total{alias="",name="internal3",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_packets_total{alias="",name="internal4",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_packets_total{alias="",name="internal5",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_packets_total{alias="",name="modem",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_packets_total{alias="",name="npu0_vlink0",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_transmit_packets_total{alias="",name="npu0_vlink1",parent="",vdom="root",vlanid="0"} 1
+	fortigate_interface_transmit_packets_total{alias="",name="vlan-knx",parent="downlink",vdom="knx",vlanid="2030"} 119021
+	fortigate_interface_transmit_packets_total{alias="",name="vlan-ocp-knx",parent="a",vdom="knx",vlanid="2030"} 3638
+	fortigate_interface_transmit_packets_total{alias="",name="wan1",parent="",vdom="main",vlanid="0"} 2.1184365e+07
+	fortigate_interface_transmit_packets_total{alias="",name="wan2",parent="",vdom="root",vlanid="0"} 0
+	fortigate_interface_transmit_packets_total{alias="(mgmt)",name="dmz",parent="",vdom="root",vlanid="0"} 6.632568e+06
+	fortigate_interface_transmit_packets_total{alias="(ocp-mgmt)",name="a",parent="",vdom="main",vlanid="0"} 1.30413416e+08
+	fortigate_interface_transmit_packets_total{alias="(vlan-infra-mgmt)",name="downlink",parent="",vdom="infra",vlanid="0"} 1.23901895e+08
+	`
+	if err := testutil.GatherAndCompare(r, strings.NewReader(em)); err != nil {
+		t.Fatalf("metric compare: err %v", err)
+	}
+}

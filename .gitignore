@@ -1,0 +1,20 @@
+# Build
+/.build
+/.release
+/.tarballs
+
+# Artifacts
+fortigate_exporter
+*.exe
+
+# coverage
+cover.out
+coverage.html
+
+# Local credentials (do not commit production secrets)
+fortigate-key.yaml
+/.env
+/.env.*
+!/.env.example
+*.pem
+*.key
